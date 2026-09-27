@@ -67,6 +67,7 @@
 #include <llvm/Transforms/Vectorize/SLPVectorizer.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Analysis/TargetTransformInfoImpl.h>
+#include <llvm/Analysis/ValueTracking.h>
 
 #include <functional>
 #include <map>
