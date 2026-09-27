@@ -1735,6 +1735,24 @@ std::string Emitter::gepExpr(GEPOperator* G, std::function<std::string(Value*)> 
 
 // ---------------------------------------------------------------------------
 
+// The end of a kernel signature (after __nctaid) and the lane / simdgroup ids its text refers to. By default both
+// are derived from the thread's position: CUDA forms warps from the linear thread index (x fastest), Metal forms
+// simdgroups the same way, and Apple GPUs run 32-wide simdgroups (threadExecutionWidth), so linear & 31 is the lane
+// and linear >> 5 the simdgroup. Metal's own attributes are equivalent, but the M4 Pro shader compiler
+// deterministically miscompiled a kernel that read [[simdgroup_index_in_threadgroup]] (M5 Max compiled the same
+// source correctly; deriving the index from the thread position fixed it). MVCC_SIMD_ATTRS=1 declares the attributes
+// instead, to compare the two on a given GPU.
+static std::string simdIds(const std::string& text) {
+  static const bool attrs = [] { const char* e = getenv("MVCC_SIMD_ATTRS"); return e && e[0] == '1'; }();
+  if (attrs) return ",\n    uint __lane [[thread_index_in_simdgroup]], uint __sgid [[simdgroup_index_in_threadgroup]]) {\n";
+  const bool lane = text.find("__lane") != std::string::npos, sgid = text.find("__sgid") != std::string::npos;
+  std::string s = ") {\n";
+  if (lane || sgid) s += "  const uint __ltid = __tid.x + __ntid.x * (__tid.y + __ntid.y * __tid.z);\n";
+  if (lane) s += "  const uint __lane = __ltid & 31u;\n";
+  if (sgid) s += "  const uint __sgid = __ltid >> 5;\n";
+  return s;
+}
+
 static constexpr unsigned kTpDefaultMaxThreads = 256;
 
 void Emitter::layoutSharedMemory(Function& Fn) {
@@ -1920,8 +1938,8 @@ void Emitter::emitKernel(Function& Fn) {
   // device-memory pool at [[buffer(5)]] taken at entry and released on every return path (__MVCC_RETURN).
   k += "#ifdef __MVCC_SPILL\n    device uchar* __mvcc_spill [[buffer(5)]],\n#else\n    threadgroup uchar* __smem [[threadgroup(0)]],\n#endif\n";
   k += "    uint3 __tid [[thread_position_in_threadgroup]], uint3 __ctaid [[threadgroup_position_in_grid]],\n";
-  k += "    uint3 __ntid [[threads_per_threadgroup]], uint3 __nctaid [[threadgroups_per_grid]],\n";
-  k += "    uint __lane [[thread_index_in_simdgroup]], uint __sgid [[simdgroup_index_in_threadgroup]]) {\n";
+  k += "    uint3 __ntid [[threads_per_threadgroup]], uint3 __nctaid [[threadgroups_per_grid]]";
+  k += simdIds(prologue + decls + body);
   k += "#ifdef __MVCC_SPILL\n";
   k += "  threadgroup uint __mvcc_slot_tg;\n";
   k += "  if ((__tid.x | __tid.y | __tid.z) == 0u) __mvcc_slot_tg = __mvcc_spill_acquire(__mvcc_spill, __ctaid.x + __nctaid.x * (__ctaid.y + __nctaid.y * __ctaid.z), __ntid.x * __ntid.y * __ntid.z);\n";
@@ -2853,8 +2871,10 @@ void Emitter::emitVerifyKernels() {
     const std::string T = d.mslType();
     const int MB = d.M / 16, NB = d.N / 16, KB = d.K / 16, nA = d.M * d.K / 64, nB = d.K * d.N / 64, cap = d.M * d.N / 32;
     std::string k;
+    // Launched as one 32-thread simdgroup; __lane comes from the same derivation the kernels it vouches for use.
     k += "kernel void " + v.name + "(device const ushort* A [[buffer(0)]], device const ushort* B [[buffer(1)]], device float* out [[buffer(2)]],\n";
-    k += "    uint __lane [[thread_index_in_simdgroup]]) {\n";
+    k += "    uint3 __tid [[thread_position_in_threadgroup]], uint3 __ntid [[threads_per_threadgroup]]";
+    k += simdIds("__lane");
     // A logical [m][k]; memory rows m (k contiguous) unless tl -> rows k (m contiguous). B logical [k][n]; memory rows n
     // (k contiguous) when tr, else rows k (n contiguous). Row pitch = the contiguous extent (+8 halves padding).
     const int aRows = d.tl ? d.K : d.M, aCols = d.tl ? d.M : d.K, bRows = d.tr ? d.N : d.K, bCols = d.tr ? d.K : d.N;

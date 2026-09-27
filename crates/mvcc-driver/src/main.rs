@@ -106,6 +106,7 @@ MVCC_KEEP=1            keep intermediates next to the output (.ll, .metal, .abi.
 MVCC_VERBOSE=1         print every sub-command\n  \
 MVCC_TENSOR_DIAG=1     explain, per kernel, what tensor recovery did or why it declined\n  \
 MVCC_TENSOR_EXACT=1    launch exact twins at runtime\n  \
+MVCC_SIMD_ATTRS=1      read lane/simdgroup ids from Metal's attributes instead of deriving them from the thread position\n  \
 MVCC_METALLIB_DIR      load precompiled <hash>.metallib files\n  \
 MVCC_DEVICES=n         present n logical devices (1–16)\n  \
 MVCC_GRAPH=<file>      compile-time kernel graph for fusion (default: infer sequential edges)\n\n\

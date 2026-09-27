@@ -216,6 +216,7 @@ MVCC_METALLIB_DIR=./metallibs ./app
 | `MVCC_VERIFY=0`           | Skip the build-time Metal compile check of generated MSL                                    |
 | `MVCC_TENSOR_DIAG=1`      | Report, for each kernel, what tensor-core recovery did or why it declined                   |
 | `MVCC_TENSOR_EXACT=1`     | Launch the exact translations instead of recovered kernels                                  |
+| `MVCC_SIMD_ATTRS=1`       | Compile lane and warp ids from Metal's simdgroup attributes instead of the thread position  |
 | `MVCC_METALLIB_DIR=<dir>` | Load precompiled `<hash>.metallib` files from `<dir>`                                       |
 | `MVCC_DEVICES=<n>`        | Present `n` logical devices (1-16)                                                          |
 | `MVCC_GRAPH=<file>`       | Kernel graph for compile-time fusion (by default, inferred from kernel order in the module) |
